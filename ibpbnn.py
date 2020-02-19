@@ -69,16 +69,16 @@ class IBP_BNN(nn.Module):
         self.training_size = training_size# Number of training data points (for normlaizing gradient values).
         self.global_multiplier = 1# For explicit prior importance during KL divergence calculation.
         self.init_var = -6.0# Prior initializaion log variance.
-        self.acts = acts
-        self.gauss_rep = True
-        self.device = 'cpu'
+        self.acts = acts # Per layer Activations if are explicitly mentioned
+        self.gauss_rep = True # Use gaussian reparameterization
+        self.device = 'cpu' 
         self.relu = F.relu
         self.learning_rate = learning_rate
-        self.init_temp = 10.0
-        self.grow_min = 10
-        self.prior_mu = torch.tensor(prior_mean).float()
+        self.init_temp = 10.0 # Initial temperature for concrete distribution
+        self.grow_min = 10 # Threshold for growing the network
+        self.prior_mu = torch.tensor(prior_mean).float() # Saving prior parameters for reusing while growing
         self.prior_var = torch.tensor(prior_var).float()
-        self.grow_net = False
+        self.grow_net = False # Is it a growing network or not
    
         ## Parameter Initiliatlizations 
         self.intialize(alpha, beta, input_size, hidden_size, output_size, prev_means, 

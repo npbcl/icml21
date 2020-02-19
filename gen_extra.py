@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+# os.environ["CUDA_VISIBLE_DEVICES"]="3"
 from ibpbnn_vae import IBP_BAE
 import copy as cpy
 import torch

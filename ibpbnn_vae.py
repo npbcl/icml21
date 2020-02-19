@@ -70,15 +70,15 @@ class IBP_BAE(nn.Module):
         self.training_size = training_size# Number of training data points (for normlaizing gradient values).
         self.global_multiplier = 1# For explicit prior importance during KL divergence calculation.
         self.init_var = -6.0# Prior initializaion log variance.
-        self.acts = acts
-        self.gauss_rep = True
+        self.acts = acts # Per layer Activations if are explicitly mentioned
+        self.gauss_rep = True # Use gaussian reparameterization
         self.device = 'cpu'
         self.relu = F.leaky_relu
-        self.conditional = True
-        self.use_unit_sigma = True
-        self.prior_mu = torch.tensor(prior_mean).float()
+        self.conditional = True # Weather to learn the priors on latent space or not
+        self.use_unit_sigma = True # If learning the latent space weather to use fixed unit sigma or learn that also (True mean fix unit sigma)
+        self.prior_mu = torch.tensor(prior_mean).float() # If not learning the prior over latent space use these prior
         self.prior_var = torch.tensor(prior_var).float()
-        self.KL_gauss_scaling = 1.0
+        self.KL_gauss_scaling = 1.0 # Explicit scaling of gaussian KL divergence on latent space.
    
         ## Parameter Initiliatlizations 
         self.intialize(alpha, beta, input_size, hidden_size, output_size, prev_means, 
