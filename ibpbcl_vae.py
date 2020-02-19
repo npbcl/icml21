@@ -152,8 +152,10 @@ class IBP_BCL:
             samples = final_model.gen_samples(i, num_samples).cpu().detach().numpy()
             recosn = pred_mean[:num_samples]
             for s in range(num_samples):
-                ax[s][i].imshow(np.reshape(recosn[s], [28,28]))
-#                 ax[s][i*2+1].imshow(np.reshape(recosn[s], [28,28]))
+                if(len(x_testsets) == 1):
+                    ax[s].imshow(np.reshape(recosn[s], [28,28]))
+                else:
+                    ax[s][i].imshow(np.reshape(recosn[s], [28,28]))
 
         plt.savefig('./Gens/Task_till_' + str(i) +'.png')
 
