@@ -17,14 +17,28 @@ import pickle
 from visualisation import plot_images
 from sklearn.manifold import TSNE as tsne
 from data_generators import PermutedMnistGenerator, SplitMnistGenerator, NotMnistGenerator, OneMnistGenerator, OneNotMnistGenerator
+import torchvision
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+from IPython.display import clear_output as clr
 
-
-dataset_ = 'mnist'
+# dataset_ = 'mnist'
+# dataset_ = 'notmnist'
+dataset_ = str(input())
 paths = {
     'mnist' : 'saves',
     'notmnist' : 'saves'
 }
 no_tasks = 10
+
+def show_images(images):
+    images = torchvision.utils.make_grid(images, nrow=10)
+    show_image(images.permute(1,2,0))
+
+def show_image(img):
+    plt.imshow(img)
+#     plt.show()
+
 
 def get_model(get_till = 1, dict_path = './cache/01'):
     mf_weights, mf_variances = None, None
@@ -47,7 +61,7 @@ elif(dataset_ == 'notmnist'):
 in_dim, out_dim = data_gen.get_dims()
 max_tasks = data_gen.max_iter
 
-hidden_size = [400, 200, 50]
+hidden_size = [500, 500, 100]
 alpha = [140.0, 140.0, 40.0, 140.0, 140.0]
 no_epochs = 50
 coreset_size = 0#50
@@ -91,7 +105,7 @@ manif = tsne(n_components = 2)
 Z_embedded = manif.fit_transform(Z_with_means)
 
 prev = 0
-figure = plt.figure(figsize = [16,8])
+figure = plt.figure(figsize = [8,8])
 till = no_tasks
 tasks = np.arange(no_tasks)[:till]
 for t in tasks:
@@ -99,13 +113,14 @@ for t in tasks:
     plt.plot(Z_embedded[prev:now+prev,0],Z_embedded[prev:now+prev,1], '.', label = "class_" + str(t))
     prev = now+prev
 
-prev = Z.shape[0]
-for t in tasks:
-    plt.plot(Z_embedded[prev+t:prev+t+1,0],Z_embedded[prev+t:prev+t+1,1], 'o', markersize=12, 
-             color = 'C'+str(t), markeredgecolor=(0,0,0,1), markeredgewidth=2)
+# prev = Z.shape[0]
+# for t in tasks:
+#     plt.plot(Z_embedded[prev+t:prev+t+1,0],Z_embedded[prev+t:prev+t+1,1], 'o', markersize=12, 
+#              color = 'C'+str(t), markeredgecolor=(0,0,0,1), markeredgewidth=2)
     
 plt.legend()
 plt.savefig('./Gens/'+dataset_+'_tsne_plot.png')
+plt.savefig('./Gens/'+dataset_+'_tsne_plot.eps', format = 'eps')
 
 # Done 
 def gen_samples(model, task_id, num_samples):
@@ -123,7 +138,8 @@ with torch.no_grad():
     num_samples = 10
     logliks = []
     num_run = no_tasks
-    fig, ax = plt.subplots(num_samples, num_run, figsize = [8,8])
+    cache = []
+    # fig, ax = plt.subplots(num_samples, num_run, figsize = [8,8])
     for i in range(len(x_testsets[:num_run])):
         
         print("Generating Task " + str(i))
@@ -139,16 +155,23 @@ with torch.no_grad():
 #         samples = pred_mean[:num_samples]
 #         samples = model.gen_samples(i, num_samples).cpu().detach().numpy()
         samples = F.sigmoid(gen_samples(model, i, num_samples)).cpu().detach().numpy()
-        for s in range(num_samples):
-            ax[s][i].imshow(np.reshape(samples[s], [28,28]), cmap = 'gray')
+        cache.append(samples)
+        # for s in range(num_samples):
+        #     ax[s][i].imshow(np.reshape(samples[s], [28,28]), cmap = 'gray')
     
-    plt.savefig('./Gens/'+dataset_+'_generated.png')
-    
+    # plt.savefig('./Gens/'+dataset_+'_generated.png')
+
+fig = plt.figure(figsize = [8,8])
+show_images(torch.tensor(cache).permute(1,0,2).reshape(-1,28,28).unsqueeze(1))
+plt.savefig('./Gens/'+dataset_+'generated.png')
+plt.savefig('./Gens/'+dataset_+'generated.eps', format = 'eps')
+
 with torch.no_grad():
     num_samples = 10
     logliks = []
     num_run = no_tasks
-    fig, ax = plt.subplots(num_samples, num_run, figsize = [8,8])
+    cache = []
+    # fig, ax = plt.subplots(num_samples, num_run, figsize = [8,8])
     for i in range(len(x_testsets[:num_run])):
 
         print("Reconstructing Task " + str(i))
@@ -162,13 +185,19 @@ with torch.no_grad():
         logliks.append(log_lik)
 
         samples = pred_mean[:num_samples]
+        cache.append(samples)
+        
 #         samples = model.gen_samples(i, num_samples).cpu().detach().numpy()
 #         samples = F.sigmoid(gen_samples(model, i, num_samples)).cpu().detach().numpy()
-        for s in range(num_samples):
-            ax[s][i].imshow(np.reshape(samples[s], [28,28]), cmap = 'gray')
+        # for s in range(num_samples):
+        #     ax[s][i].imshow(np.reshape(samples[s], [28,28]), cmap = 'gray')
 
-    plt.savefig('./Gens/'+dataset_+'_reconstructed.png')
-        
+    # plt.savefig('./Gens/'+dataset_+'_reconstructed.png')
+
+fig = plt.figure(figsize = [8,8])
+show_images(torch.tensor(cache).permute(1,0,2).reshape(-1,28,28).unsqueeze(1))
+plt.savefig('./Gens/'+dataset_+'recon.png')
+plt.savefig('./Gens/'+dataset_+'recon.eps', format = 'eps')      
 
 print('Generating Samples')
 for i in range(no_tasks):

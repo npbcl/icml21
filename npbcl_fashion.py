@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 try:
     os.mkdir('./saves')
 except:
@@ -13,8 +13,8 @@ from ibpbcl import IBP_BCL
 import torch
 
 
-torch.manual_seed(8)
-np.random.seed(10)
+torch.manual_seed(19)
+np.random.seed(1)
 
 
 hidden_size = [200]
@@ -30,6 +30,7 @@ batch_size = 256
 # data_gen = SplitMnistGenerator()
 # data_gen = NotMnistGenerator()
 data_gen = FashionMnistGenerator()
-model = IBP_BCL(hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size, single_head)
+model = IBP_BCL(hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size, single_head, grow = False)
 
-model.batch_train(batch_size)
+accs, _ = model.batch_train(batch_size)
+np.save('./saves/fashionmnist_accuracies.npy', accs)

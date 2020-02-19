@@ -1221,8 +1221,8 @@ class IBP_BAE(nn.Module):
                         "{:.4f}".format(avg_cost1), "cost3=", \
                         "{:.4f}".format(avg_cost2), "cost4=", \
                         "{:.4f}".format(avg_cost3), "cost_val=", \
-                        "{:.4f}".format(vc), "acc_val=", \
-                        "{:.4f}".format(acc))
+                        "{:.4f}".format(vc))#, "acc_val=", \
+#                         "{:.4f}".format(acc))
                     print("KL_z=",(sum(self.KL_G)/self.training_size).data)
                     print("Temperature :", temp)
                 costs.append(avg_cost)
@@ -1276,8 +1276,8 @@ class IBP_BAE(nn.Module):
                     "{:.4f}".format(avg_cost1), "cost3=", \
                     "{:.4f}".format(avg_cost2), "cost4=", \
                     "{:.4f}".format(avg_cost3), "cost_val=", \
-                    "{:.4f}".format(vc), "acc_val=", \
-                    "{:.4f}".format(acc))
+                    "{:.4f}".format(vc))#, "acc_val=", \
+#                     "{:.4f}".format(acc))
                     
         print("Optimization Finished!")
         return costs

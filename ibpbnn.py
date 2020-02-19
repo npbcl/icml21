@@ -611,7 +611,7 @@ class IBP_BNN(nn.Module):
 
         vs = self.v_post_distr(l, shape = [no_samples,din])# Independently sampling current layer IBP posterior : K x din x dout
         pis = torch.cumprod(vs, dim=2)# Calcuting Pi's using nu's (IBP prior log probabilities): K x din x dout
-        method = 0
+        method = 1
         if(method == 0):
             logit_post = self._p_bers[l].unsqueeze(0) + self.logit(pis)# Varaitonal posterior log_alpha: K x din x dout
         elif(method == 1):

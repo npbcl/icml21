@@ -19,7 +19,7 @@ np.random.seed(10)
 
 
 class IBP_BCL:
-    def __init__(self, hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size=0, single_head=True):
+    def __init__(self, hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size=0, single_head=True, grow = False):
         '''
         hidden_size : list of network hidden layer sizes
         alpha : IBP prior concentration parameters
@@ -39,6 +39,7 @@ class IBP_BCL:
             self.coreset_method = self.k_center
         self.coreset_size = coreset_size
         self.single_head = single_head 
+        self.grow = grow
         self.cuda = torch.cuda.is_available()
     
     def rand_from_batch(self, x_coreset, y_coreset, x_train, y_train, coreset_size):
@@ -197,6 +198,8 @@ class IBP_BCL:
                                prev_means=mf_weights, prev_log_variances=mf_variances, 
                                prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
                                kl_mask = kl_mask, single_head=self.single_head)
+        
+            mf_model.grow_net = self.grow
             if(self.cuda):
                 mf_model = mf_model.cuda()
                 if torch.cuda.device_count() > 1: 
@@ -233,6 +236,7 @@ class IBP_BCL:
             ax1[task_id].imshow(mask,vmin=0, vmax=1)
             fig1.savefig("union_mask.png")
             print("Network sparsity : ", sparsity)
+            mf_model.grow_net = False
             
             acc = self.get_scores(mf_model, x_testsets, y_testsets, x_coresets, y_coresets, 
                                   self.hidden_size, self.no_epochs, self.single_head, batch_size, kl_mask)

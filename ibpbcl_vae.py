@@ -117,7 +117,7 @@ class IBP_BCL:
 
         ## Testing for all previously learned tasks
         num_samples = 10
-        fig, ax = plt.subplots(num_samples, len(x_testsets)*2, figsize = [20,10])
+        fig, ax = plt.subplots(num_samples, len(x_testsets), figsize = [10,10])
         for i in range(len(x_testsets)):
             if not single_head:# If model is multi headed.
                 if len(x_coresets) > 0:
@@ -152,8 +152,8 @@ class IBP_BCL:
             samples = final_model.gen_samples(i, num_samples).cpu().detach().numpy()
             recosn = pred_mean[:num_samples]
             for s in range(num_samples):
-                ax[s][i*2].imshow(np.reshape(samples[s], [28,28]))
-                ax[s][i*2+1].imshow(np.reshape(recosn[s], [28,28]))
+                ax[s][i].imshow(np.reshape(recosn[s], [28,28]))
+#                 ax[s][i*2+1].imshow(np.reshape(recosn[s], [28,28]))
 
         plt.savefig('./Gens/Task_till_' + str(i) +'.png')
 
