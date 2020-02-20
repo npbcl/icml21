@@ -18,3 +18,8 @@ Individual experiments can be run using `pyhton3 experiment_name.py`
 - Experiment names starts with : `npbcl_xxx.py`
 - Copy and save the stored experiment models using : `echo -e "saves\ncache/destination" | python3 save.py`
 - Copy and save the generative experiment images : `echo -e "Gens\ncache/destination" | python3 save.py`
+
+
+## Results
+If you ran all experiments using sh file. You can see all experiment results in cache folder.
+After individual experiment the results are stored in saves folder and Gens folder.
