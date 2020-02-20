@@ -30,4 +30,4 @@ model = IBP_BCL(hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset
 
 
 liks, _ = model.batch_train(batch_size)
-np.save('./saves/splitmnist_accuracies.npy', liks)
+np.save('./saves/mnist_likelihoods.npy', liks)
