@@ -28,3 +28,6 @@ Individual experiments can be run using `pyhton3 experiment_name.py`
 ## Results
 If you ran all experiments using sh file. You can see all experiment results in cache folder.
 After individual experiment the results are stored in saves folder and Gens folder.
+
+### Credits
+We have developed our code based on starter code from [VCL](https://github.com/nvcuong/variational-continual-learning/)
