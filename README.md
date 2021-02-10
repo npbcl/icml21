@@ -1,4 +1,4 @@
-# NPBCL : icml20
+# NPBCL : icml21
 This is a PyTorch implementation of the Bayesian Structure Adaptation for Continual Learning.
 
 ## Requirements
@@ -21,8 +21,8 @@ Individual experiments can be run using `pyhton3 experiment_name.py`
 - Copy and save the generative experiment images : `echo -e "Gens\ncache/destination" | python3 save.py`
 
 ## Running on Google Colaboratory
-- Create a new notebook on colab and clone this repo : `! git clone https://github.com/npbcl/icml20.git`
-- Change working directory to icml20 folder : `os.chdir('icml20')`
+- Create a new notebook on colab and clone this repo : `! git clone https://github.com/npbcl/icml21.git`
+- Change working directory to icml20 folder : `os.chdir('icml21')`
 - Run all experiments : `sh run_all.sh`
 
 ## Results
