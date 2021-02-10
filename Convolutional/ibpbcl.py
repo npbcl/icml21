@@ -1,5 +1,5 @@
 import os
-from ibpbnn_vae import IBP_BAE
+from ibpbnn import IBP_BNN
 import copy as cpy
 import torch
 import torch.nn as nn
@@ -11,12 +11,15 @@ import math
 from copy import deepcopy
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import gzip
 import pickle
+torch.manual_seed(7)
+np.random.seed(10)
+
 
 class IBP_BCL:
-    def __init__(self, hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size=0, single_head=True):
+    def __init__(self, hidden_size, alpha, no_epochs, data_gen, coreset_method, coreset_size=0, single_head=True, grow = False):
         '''
         hidden_size : list of network hidden layer sizes
         alpha : IBP prior concentration parameters
@@ -26,8 +29,8 @@ class IBP_BCL:
         '''
         ## Intializing Hyperparameters for the model.
         self.hidden_size = hidden_size
-        self.alpha = alpha#[alpha for i in range(len(hidden_size)*2-1)]
-        self.beta = [1.0 for i in range(len(hidden_size)*2-1)]
+        self.alpha = alpha
+        self.beta = [1.0 for i in range(len(hidden_size))]
         self.no_epochs = no_epochs
         self.data_gen = data_gen
         if(coreset_method != "kcen"):
@@ -36,6 +39,7 @@ class IBP_BCL:
             self.coreset_method = self.k_center
         self.coreset_size = coreset_size
         self.single_head = single_head 
+        self.grow = grow
         self.cuda = torch.cuda.is_available()
     
     def rand_from_batch(self, x_coreset, y_coreset, x_train, y_train, coreset_size):
@@ -57,7 +61,7 @@ class IBP_BCL:
         idx = [current_id]
         for i in range(1, coreset_size):
             current_id = np.argmax(dists)
-            dists = update_distance(dists, x_train, current_id)
+            dists = self.update_distance(dists, x_train, current_id)
             idx.append(current_id)
         x_coreset.append(x_train[idx,:])
         y_coreset.append(y_train[idx,:])
@@ -86,7 +90,7 @@ class IBP_BCL:
     def get_soft_logit(self, masks, task_id):
         var = []
         for i in range(len(masks)):
-            var.append(self.logit(masks[i][task_id]*0.8 + 0.1))
+            var.append(self.logit(masks[i][task_id]*0.98 + 0.01))
         
         return var
        
@@ -95,8 +99,8 @@ class IBP_BCL:
         ## Retrieving the current model parameters
         mf_model = model
         mf_weights, mf_variances = model.get_weights()
-        prev_masks, self.alpha, self.beta = mf_model.get_IBP()
-        logliks = []
+        prev_masks, alpha, beta = mf_model.get_IBP()
+        acc = []
         
         ## In case the model is single head or have coresets then we need to test accodingly.
         if single_head:# If model is single headed.
@@ -106,18 +110,16 @@ class IBP_BCL:
                 x_train, y_train = self.merge_coresets(x_coresets, y_coresets)
                 prev_pber = self.get_soft_logit(prev_masks,i)
                 bsize = x_train.shape[0] if (batch_size is None) else batch_size
-                final_model = IBP_BAE(x_train.shape[1], hidden_size, y_train.shape[1], x_train.shape[0], self.max_tasks,
+                final_model = IBP_BNN(x_train.shape[1], hidden_size, y_train.shape[1], x_train.shape[0], self.max_tasks,
                                    prev_means=mf_weights, prev_log_variances=mf_variances, 
                                    prev_masks = prev_masks, alpha=alpha, beta = beta, prev_pber = prev_pber, 
                                    kl_mask = kl_mask, single_head=single_head)
                 final_model.ukm = 1
-                final_model.batch_train(x_train, y_train, 0, self.no_epochs, bsize, max(self.no_epochs//5,1))
+                final_model.batch_train(x_train, y_train, 0, 1, bsize, 1)
             else:# Model does not have coreset
                 final_model = model
 
         ## Testing for all previously learned tasks
-        num_samples = 10
-        fig, ax = plt.subplots(num_samples, len(x_testsets), figsize = [10,10])
         for i in range(len(x_testsets)):
             if not single_head:# If model is multi headed.
                 if len(x_coresets) > 0:
@@ -129,37 +131,26 @@ class IBP_BCL:
                     x_train, y_train = x_coresets[i], y_coresets[i]# coresets per task
                     prev_pber = self.get_soft_logit(prev_masks,i)
                     bsize = x_train.shape[0] if (batch_size is None) else batch_size
-                    final_model = IBP_BAE(x_train.shape[1], hidden_size, y_train.shape[1], x_train.shape[0], self.max_tasks, 
+                    final_model = IBP_BNN(x_train.shape[1], hidden_size, y_train.shape[1], x_train.shape[0], self.max_tasks, 
                                    prev_means=mf_weights, prev_log_variances=mf_variances, 
                                    prev_masks = prev_masks, alpha=alpha, beta = beta, prev_pber = prev_pber, 
                                    kl_mask = kl_mask, learning_rate = 0.0001, single_head=single_head)
                     final_model.ukm = 1
-                    final_model.batch_train(x_train, y_train, i, self.no_epochs, bsize, max(self.no_epochs//5,1), init_temp = 0.25)
+                    final_model.batch_train(x_train, y_train, i, 1, bsize, 1, init_temp = final_model.min_temp)
                 else:
                     final_model = model
             
             
             x_test, y_test = x_testsets[i], y_testsets[i]
             pred = final_model.prediction_prob(x_test, i)
-            pred_mean = np.mean(pred, axis=1) # N x O
-            eps = 10e-8
-            target = y_test#targets.unsqueeze(1).repeat(1, self.no_train_samples, 1)# Formating desired output : N x O
-            loss = np.sum(- target * np.log(pred_mean+eps) - (1.0 - target) * np.log(1.0-pred_mean+eps) , axis = -1)
-            log_lik = - (loss).mean()# Binary Crossentropy Loss
-            logliks.append(log_lik)
-
-            # samples = pred_mean[:num_samples]
-            samples = final_model.gen_samples(i, num_samples).cpu().detach().numpy()
-            recosn = pred_mean[:num_samples]
-            for s in range(num_samples):
-                if(len(x_testsets) == 1):
-                    ax[s].imshow(np.reshape(recosn[s], [28,28]))
-                else:
-                    ax[s][i].imshow(np.reshape(recosn[s], [28,28]))
-
-        plt.savefig('./Gens/Task_till_' + str(i) +'.png')
-
-        return logliks
+            pred_mean = np.mean(pred, axis=1)
+            pred_y = np.argmax(pred_mean, axis=1)
+            y = np.argmax(y_test, axis=1)
+            # Calculating the accuracy of the model on given test/validaiton data.
+            cur_acc = len(np.where((pred_y - y) == 0)[0]) * 1.0 / y.shape[0]
+            acc.append(cur_acc)
+            
+        return acc
 
     def concatenate_results(self, score, all_score):
         ## Concats the current accuracies on all task to previous result in form of matrix
@@ -176,7 +167,6 @@ class IBP_BCL:
         '''
         batch_size : Batch_size for gradient updates
         '''
-        np.set_printoptions(linewidth=np.inf)
         ## Intializing coresets and dimensions.
         in_dim, out_dim = self.data_gen.get_dims()
         x_coresets, y_coresets = [], []
@@ -184,7 +174,7 @@ class IBP_BCL:
         x_trainset, y_trainset = [], []
         all_acc = np.array([])
         self.max_tasks = self.data_gen.max_iter
-        # fig1, ax1 = plt.subplots(1,self.max_tasks, figsize = [10,5])
+        fig1, ax1 = plt.subplots(1,self.max_tasks, figsize = [10,5])
         ## Training the model sequentially.
         for task_id in range(self.max_tasks):
             ## Loading training and test data for current task
@@ -204,10 +194,12 @@ class IBP_BCL:
             if self.coreset_size > 0:
                 x_coresets,y_coresets,x_train,y_train = self.coreset_method(x_coresets,y_coresets,x_train,y_train,self.coreset_size)
             ## Training the network  
-            mf_model = IBP_BAE(in_dim, self.hidden_size, out_dim, x_train.shape[0], self.max_tasks, 
+            mf_model = IBP_BNN(in_dim, self.hidden_size, out_dim, x_train.shape[0], self.max_tasks, 
                                prev_means=mf_weights, prev_log_variances=mf_variances, 
                                prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
                                kl_mask = kl_mask, single_head=self.single_head)
+        
+            mf_model.grow_net = self.grow
             if(self.cuda):
                 mf_model = mf_model.cuda()
                 # if torch.cuda.device_count() > 1: 
@@ -215,34 +207,38 @@ class IBP_BCL:
             mf_model.batch_train(x_train, y_train, task_id, self.no_epochs, bsize,max(self.no_epochs//5,1))
             mf_weights, mf_variances = mf_model.get_weights()
             prev_masks, self.alpha, self.beta = mf_model.get_IBP()
+            self.hidden_size = mf_model.get_hiddensize()
+            # print(self.hidden_size)
+            # assert 1==2
 
             ## Figure of masks that has been learned for all seen tasks.
-            # fig, ax = plt.subplots(1,task_id+1, figsize = [10,5])
-            # for i,m in enumerate(prev_masks[0][:task_id+1]):
-            #     if(task_id == 0):
-            #         ax.imshow(m, vmin = 0, vmax = 1)
-            #     else:
-            #         ax[i].imshow(m,vmin=0, vmax=1)
-            # fig.savefig("all_masks.png")
-            
+            fig, ax = plt.subplots(1,task_id+1, figsize = [10,5])
+            for i,m in enumerate(prev_masks[0][:task_id+1]):
+                if(task_id == 0):
+                    ax.imshow(m, vmin = 0, vmax = 1)
+                else:
+                    ax[i].imshow(m,vmin=0, vmax=1)
+            fig.savefig("all_masks.png")
             ## Calculating Union of all task masks and also for visualizing the layer wise network sparsity
             sparsity = []
             kl_mask = []
-            M = len(mf_variances[0])
+            M = len(prev_masks)
             for j in range(M):
+                c_layer_masks = prev_masks[j]
+                canvas = np.zeros_like(c_layer_masks[task_id])
+                for t_id in range(task_id+1):
+                    din, dout = c_layer_masks[t_id].shape
+                    canvas[:din,:dout] = canvas[:din,:dout] + c_layer_masks[t_id]
                 ## Plotting union mask
-                var = (np.sum(prev_masks[j][:task_id+1],0)>0.5)*1.02
-                mask = (var > 0.5)*1
-                mask2 = (np.sum(prev_masks[j][:task_id+1],0) > 0.1)*1.0
+                mask = (canvas > 0.01)*1.0
                 ## Calculating network sparsity
-                var2 = (np.sum(prev_masks[j][:task_id+1],0) > 0.5)
-                kl_mask.append(var2)
+                kl_mask.append(mask)
                 filled = np.mean(mask)
                 sparsity.append(filled)
-            
-            # ax1[task_id].imshow(mask2,vmin=0, vmax=1)
-            # fig1.savefig("union_mask.png")
+            ax1[task_id].imshow(mask,vmin=0, vmax=1)
+            fig1.savefig("union_mask.png")
             print("Network sparsity : ", sparsity)
+            mf_model.grow_net = False
             
             acc = self.get_scores(mf_model, x_testsets, y_testsets, x_coresets, y_coresets, 
                                   self.hidden_size, self.no_epochs, self.single_head, batch_size, kl_mask)
@@ -250,7 +246,6 @@ class IBP_BCL:
             torch.save(mf_model.state_dict(), "./saves/model_last_" + str(task_id))
             del mf_model
             torch.cuda.empty_cache() 
-            all_acc = self.concatenate_results(acc, all_acc); print(all_acc.round(3)); print('*****')
+            all_acc = self.concatenate_results(acc, all_acc); print(all_acc); print('*****')
 
-        np.savetxt('./Gens/res.txt', all_acc)
         return [all_acc, prev_masks]

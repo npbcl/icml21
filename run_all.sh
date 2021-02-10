@@ -45,3 +45,10 @@ python3 npbcl_vae_notmnist.py
 echo "notmnist" | python3 gen_extra.py
 echo "saves\ncache/vae_notmnist" | python3 save.py
 echo "Gens\ncache/vae_notmnist" | python3 save.py
+## Task-agnostic Experiments
+# MNIST (one digit at a time)
+echo "Training vae on not MNIST"
+python3 npbcl_mnist_tfree.py
+cp all_masks.png cache/tfree_mnist
+cp union_mask.png cache/tfree_mnist
+rm -r saves

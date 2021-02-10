@@ -1,5 +1,5 @@
 import os
-from ibpbnn_vae import IBP_BAE
+from ibpbnn_tfree import IBP_BAE
 import copy as cpy
 import torch
 import torch.nn as nn
@@ -27,9 +27,14 @@ class IBP_BCL:
         ## Intializing Hyperparameters for the model.
         self.hidden_size = hidden_size
         self.alpha = alpha#[alpha for i in range(len(hidden_size)*2-1)]
-        self.beta = [1.0 for i in range(len(hidden_size)*2-1)]
+        self.beta = [[1.0 for i in range(len(hidden_size)*2-1)]]
         self.no_epochs = no_epochs
         self.data_gen = data_gen
+
+
+        self.Dnew = 1000 # size of minmum shortterm for new cluster creation.
+        self.first_cluster_init = False # If first cluster has been trained or not atleast once.
+
         if(coreset_method != "kcen"):
             self.coreset_method = self.rand_from_batch
         else:
@@ -140,7 +145,8 @@ class IBP_BCL:
             
             
             x_test, y_test = x_testsets[i], y_testsets[i]
-            pred = final_model.prediction_prob(x_test, i)
+            # pred = final_model.prediction_prob(x_test, i)
+            pred = self.model.prediction_prob(x_test, i)
             pred_mean = np.mean(pred, axis=1) # N x O
             eps = 10e-8
             target = y_test#targets.unsqueeze(1).repeat(1, self.no_train_samples, 1)# Formating desired output : N x O
@@ -172,10 +178,134 @@ class IBP_BCL:
             all_score = np.vstack((new_arr, score))
         return all_score
         
-    def batch_train(self, batch_size=None):
+    def batch_train(self, in_dim, out_dim, training_size, prev_means, prev_log_variances, prev_masks , prev_pber, kl_mask, x_train, y_train, bsize):
+
+            ## Training the network  
+            # mf_model = IBP_BAE(in_dim, self.hidden_size, out_dim, training_size, self.max_tasks, 
+            #                    prev_means=prev_means, prev_log_variances=prev_log_variances, 
+            #                    prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
+            #                    kl_mask = kl_mask, single_head=self.single_head, extend = False)
+            if(self.model is None):
+                print("No Model Exists...")
+                self.get_new_model(in_dim, out_dim, training_size, prev_means=prev_means, prev_log_variances=prev_log_variances, 
+                                prev_masks = prev_masks, prev_pber = prev_pber, kl_mask = kl_mask, extend = False)
+                
+            # First we need a batch size enough to train for first task
+            # Then we need to check if we need expansion so we will go with likelihood thresholding.
+            cur_index = self.Dnew
+            # Step 1. Getting Likelihoods for all current tasks
+            n_epochs_per_batch = self.no_epochs # int(np.ceil(self.no_epochs*self.Dnew/x_train.shape[0]))
+            if(not self.first_cluster_init): # If netwrok has never been trained.
+                x_train_batch = x_train[:self.Dnew]
+                y_train_batch = y_train[:self.Dnew]
+                cur_index = self.Dnew
+                self.model.batch_train(x_train_batch, y_train_batch, 0, no_epochs = n_epochs_per_batch, batch_size = bsize, display_epoch = max(n_epochs_per_batch//5,1))
+                self.first_cluster_init = True
+                
+            new_x = None
+            new_y = None
+            while(cur_index < training_size):
+                print("\n\nStream Complete : {}/{}\n\n".format(cur_index, training_size))
+                x_train_batch = x_train[cur_index:cur_index + self.Dnew]
+                y_train_batch = y_train[cur_index:cur_index + self.Dnew]
+                cur_index += self.Dnew
+                task_ll = self.model.get_loglikeli(x_train_batch, y_train_batch).cpu().view(-1).detach().numpy()
+                X_new = x_train_batch[task_ll > -160,:]
+                Y_new = y_train_batch[task_ll > -160,:]
+                if(new_x is None):
+                    new_x = X_new
+                    new_y = Y_new
+                else:
+                    new_x = np.concatenate([new_x,X_new], axis = 0)
+                    new_y = np.concatenate([new_y.reshape([-1,1]),Y_new.reshape([-1,1])], axis = 0)
+                
+                x_train_batch = x_train_batch[task_ll < -160]
+                y_train_batch = y_train_batch[task_ll < -160]
+
+                self.model.batch_train(x_train_batch, y_train_batch, 0, no_epochs = n_epochs_per_batch, batch_size = bsize, display_epoch = max(n_epochs_per_batch//5,1))
+                    
+                print("current lenghth :", len(new_x))
+                if(len(new_x) >= self.Dnew):
+
+                    mf_weights, mf_variances = self.model.get_weights()
+                    prev_masks, self.alpha, self.beta = self.model.get_IBP()
+
+                    self.get_new_model(in_dim, out_dim, training_size, prev_means=prev_means, prev_log_variances=prev_log_variances, 
+                               prev_masks = prev_masks, prev_pber = prev_pber, kl_mask = kl_mask, extend = False)
+
+                    # mf_model = IBP_BAE(in_dim, self.hidden_size, out_dim, training_size, self.max_tasks, 
+                    #                 prev_means=prev_means, prev_log_variances=prev_log_variances, 
+                    #                 prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
+                    #                 kl_mask = kl_mask, single_head=self.single_head, extend = True)
+                    
+                    self.model.batch_train(new_x, new_y, 0, no_epochs = n_epochs_per_batch, batch_size = bsize, display_epoch = max(n_epochs_per_batch//5,1))
+
+                    new_x = None
+                    new_y = None
+
+
+                # if torch.cuda.device_count() > 1: 
+                #     mf_model = nn.DataParallel(mf_model) #enabling data parallelism
+
+            
+
+            mf_weights, mf_variances = mf_model.get_weights()
+            prev_masks, self.alpha, self.beta = mf_model.get_IBP()
+            return mf_weights, mf_variances, prev_masks, mf_model
+
+    def get_new_model(self, in_dim, out_dim, training_size, prev_means, prev_log_variances, 
+                prev_masks, prev_pber, kl_mask, extend):
+        
+        if(self.model is None):
+            print("Creating Initial Model Instance")
+            self.model = IBP_BAE(in_dim, self.hidden_size, out_dim, training_size, self.max_tasks, 
+                               prev_means=prev_means, prev_log_variances=prev_log_variances, 
+                               prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
+                               kl_mask = kl_mask, single_head=self.single_head, extend = extend)
+        else:
+            print("Recreating Model Instance")
+            ## Calculating Union of all task masks and also for visualizing the layer wise network sparsity
+            sparsity = []
+            kl_mask = []
+            M = len(mf_variances[0])
+            for j in range(M):
+                ## Plotting union mask
+                var = (np.sum(prev_masks[j][:task_id+1],0)>0.5)*1.02
+                mask = (var > 0.5)*1
+                mask2 = (np.sum(prev_masks[j][:task_id+1],0) > 0.1)*1.0
+                ## Calculating network sparsity
+                var2 = (np.sum(prev_masks[j][:task_id+1],0) > 0.5)
+                kl_mask.append(var2)
+                filled = np.mean(mask)
+                sparsity.append(filled)
+            
+            # ax1[task_id].imshow(mask2,vmin=0, vmax=1)
+            # fig1.savefig("union_mask.png")
+            print("Network sparsity : ", sparsity)
+            del self.model
+            torch.cuda.empty_cache() 
+            
+            self.model = IBP_BAE(in_dim, self.hidden_size, out_dim, training_size, self.max_tasks, 
+                               prev_means=prev_means, prev_log_variances=prev_log_variances, 
+                               prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
+                               kl_mask = kl_mask, single_head=self.single_head, extend = extend)
+
+        if(self.cuda):
+            print("Cuda Exists : Transfering model on GPU")
+            model = self.model
+            self.model = model.to('cuda')#.cuda()
+            self.model.device = 'cuda'
+            print('Done')
+        print("Model Creation Complete")
+        
+
+    
+    def train_tfree(self, batch_size = None):
+
         '''
         batch_size : Batch_size for gradient updates
         '''
+        print("\n\n Entering Training Phase")
         np.set_printoptions(linewidth=np.inf)
         ## Intializing coresets and dimensions.
         in_dim, out_dim = self.data_gen.get_dims()
@@ -184,6 +314,7 @@ class IBP_BCL:
         x_trainset, y_trainset = [], []
         all_acc = np.array([])
         self.max_tasks = self.data_gen.max_iter
+        self.model = None
         # fig1, ax1 = plt.subplots(1,self.max_tasks, figsize = [10,5])
         ## Training the model sequentially.
         for task_id in range(self.max_tasks):
@@ -203,28 +334,11 @@ class IBP_BCL:
             ## Select coreset if coreset size is non zero
             if self.coreset_size > 0:
                 x_coresets,y_coresets,x_train,y_train = self.coreset_method(x_coresets,y_coresets,x_train,y_train,self.coreset_size)
-            ## Training the network  
-            mf_model = IBP_BAE(in_dim, self.hidden_size, out_dim, x_train.shape[0], self.max_tasks, 
-                               prev_means=mf_weights, prev_log_variances=mf_variances, 
-                               prev_masks = prev_masks, alpha=self.alpha, beta = self.beta, prev_pber = prev_pber, 
-                               kl_mask = kl_mask, single_head=self.single_head)
-            if(self.cuda):
-                mf_model = mf_model.cuda()
-                # if torch.cuda.device_count() > 1: 
-                #     mf_model = nn.DataParallel(mf_model) #enabling data parallelism
-            mf_model.batch_train(x_train, y_train, task_id, self.no_epochs, bsize,max(self.no_epochs//5,1))
-            mf_weights, mf_variances = mf_model.get_weights()
-            prev_masks, self.alpha, self.beta = mf_model.get_IBP()
 
-            ## Figure of masks that has been learned for all seen tasks.
-            # fig, ax = plt.subplots(1,task_id+1, figsize = [10,5])
-            # for i,m in enumerate(prev_masks[0][:task_id+1]):
-            #     if(task_id == 0):
-            #         ax.imshow(m, vmin = 0, vmax = 1)
-            #     else:
-            #         ax[i].imshow(m,vmin=0, vmax=1)
-            # fig.savefig("all_masks.png")
+            self.batch_train(in_dim, out_dim, x_train.shape[0], mf_weights, mf_variances, prev_masks , prev_pber, kl_mask, x_train, y_train, bsize)
             
+            mf_weights, mf_variances = self.model.get_weights()
+            prev_masks, self.alpha, self.beta = self.model.get_IBP()
             ## Calculating Union of all task masks and also for visualizing the layer wise network sparsity
             sparsity = []
             kl_mask = []
@@ -243,7 +357,6 @@ class IBP_BCL:
             # ax1[task_id].imshow(mask2,vmin=0, vmax=1)
             # fig1.savefig("union_mask.png")
             print("Network sparsity : ", sparsity)
-            
             acc = self.get_scores(mf_model, x_testsets, y_testsets, x_coresets, y_coresets, 
                                   self.hidden_size, self.no_epochs, self.single_head, batch_size, kl_mask)
 

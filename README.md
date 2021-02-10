@@ -1,4 +1,4 @@
-# NPBCL : icml21
+# Bayesian Structure Adaptation for Continual Learning
 This is a PyTorch implementation of the Bayesian Structure Adaptation for Continual Learning.
 
 ## Requirements
@@ -14,6 +14,7 @@ This is a PyTorch implementation of the Bayesian Structure Adaptation for Contin
 
 ## Running the experiments
 To run all experiments together (might take a while) use : `sh run_all.sh`
+Note here tfree represents the task-agnostic setting. For running convolutional network for cifar100 you need to run the file inside Convolutional folder in similar manner as this folder.
 
 Individual experiments can be run using `pyhton3 experiment_name.py`
 - Experiment names starts with : `npbcl_xxx.py`
@@ -28,6 +29,3 @@ Individual experiments can be run using `pyhton3 experiment_name.py`
 ## Results
 If you ran all experiments using sh file. You can see all experiment results in cache folder.
 After individual experiment the results are stored in saves folder and Gens folder.
-
-### Credits
-We have developed our code based on starter code from [VCL](https://github.com/nvcuong/variational-continual-learning/)
